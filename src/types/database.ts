@@ -10,6 +10,7 @@ export interface Member {
   address: string | null;
   phone: string | null;
   email: string | null;
+  notes: string | null;
   membership_status: MembershipStatus;
   created_at: string;
   updated_at: string;

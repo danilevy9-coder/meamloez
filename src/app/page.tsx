@@ -67,14 +67,16 @@ export default async function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Shul Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">Exchange Rates</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              1 USD = {stats.rate} ILS
+              1 USD = {stats.liveRate} ILS
             </div>
-            <p className="text-xs text-muted-foreground">Configured shul rate</p>
+            <p className="text-xs text-muted-foreground">
+              Live rate &middot; Shul rate: {stats.shulRate}
+            </p>
           </CardContent>
         </Card>
 

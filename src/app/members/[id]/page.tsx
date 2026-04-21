@@ -78,6 +78,11 @@ export default async function MemberProfilePage({
             {member.email && <span>{member.email}</span>}
             {member.address && <span>{member.address}</span>}
           </div>
+          {member.notes && (
+            <p className="mt-2 text-sm text-muted-foreground italic border-l-2 pl-3">
+              {member.notes}
+            </p>
+          )}
         </div>
       </div>
 

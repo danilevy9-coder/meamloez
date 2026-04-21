@@ -54,6 +54,7 @@ export async function createMember(formData: FormData): Promise<void> {
     address: (formData.get('address') as string) || null,
     phone: (formData.get('phone') as string) || null,
     email: (formData.get('email') as string) || null,
+    notes: (formData.get('notes') as string) || null,
     membership_status: (formData.get('membership_status') as MembershipStatus) || 'active',
   });
   if (error) throw new Error(error.message);
@@ -70,6 +71,7 @@ export async function updateMember(id: string, formData: FormData): Promise<void
       address: (formData.get('address') as string) || null,
       phone: (formData.get('phone') as string) || null,
       email: (formData.get('email') as string) || null,
+      notes: (formData.get('notes') as string) || null,
       membership_status: formData.get('membership_status') as MembershipStatus,
     })
     .eq('id', id);
@@ -146,11 +148,15 @@ export async function createLedgerEntry(formData: FormData): Promise<void> {
   const externalRef = (formData.get('external_ref') as string) || null;
 
   const useShulRate = formData.get('use_shul_rate') === 'true';
-  const rate = currency === 'ILS'
-    ? 1.0
-    : useShulRate
-      ? await getShulRate()
-      : await getLiveExchangeRate();
+  let rate = 1.0;
+  if (currency !== 'ILS') {
+    if (useShulRate) {
+      rate = await getShulRate();
+    } else {
+      const live = await getLiveExchangeRate();
+      rate = live.rate;
+    }
+  }
 
   const amountIls = convertToILS(amountOriginal, currency, rate);
 
@@ -222,9 +228,12 @@ export async function getDashboardStats(): Promise<{
   totalOutstandingUsd: number;
   recentPayments: LedgerEntryWithMember[];
   memberCount: number;
-  rate: number;
+  shulRate: number;
+  liveRate: number;
+  liveRateSource: string;
+  liveRateUpdatedAt: string | null;
 }> {
-  const [balancesRes, paymentsRes, membersRes, rate] = await Promise.all([
+  const [balancesRes, paymentsRes, membersRes, shulRate, liveRateData] = await Promise.all([
     supabase.from('member_balances').select('balance_ils'),
     supabase
       .from('ledger')
@@ -234,6 +243,7 @@ export async function getDashboardStats(): Promise<{
       .limit(10),
     supabase.from('members').select('id', { count: 'exact', head: true }),
     getShulRate(),
+    getLiveExchangeRate(),
   ]);
 
   const totalOutstandingIls = (balancesRes.data ?? []).reduce(
@@ -243,10 +253,13 @@ export async function getDashboardStats(): Promise<{
 
   return {
     totalOutstandingIls,
-    totalOutstandingUsd: rate > 0 ? Math.round((totalOutstandingIls / rate) * 100) / 100 : 0,
+    totalOutstandingUsd: liveRateData.rate > 0 ? Math.round((totalOutstandingIls / liveRateData.rate) * 100) / 100 : 0,
     recentPayments: (paymentsRes.data ?? []) as LedgerEntryWithMember[],
     memberCount: membersRes.count ?? 0,
-    rate,
+    shulRate,
+    liveRate: liveRateData.rate,
+    liveRateSource: liveRateData.source,
+    liveRateUpdatedAt: liveRateData.updatedAt,
   };
 }
 

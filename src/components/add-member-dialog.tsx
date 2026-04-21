@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -69,6 +70,15 @@ export function AddMemberDialog() {
               <Label htmlFor="email">Email</Label>
               <Input id="email" name="email" type="email" />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notes</Label>
+            <Textarea
+              id="notes"
+              name="notes"
+              placeholder="Any notes about this member..."
+              rows={3}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="membership_status">Status</Label>
