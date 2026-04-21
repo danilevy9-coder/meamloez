@@ -16,6 +16,7 @@ import {
   CandlestickChart,
   Upload,
   Settings,
+  FileUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -26,6 +27,7 @@ const navItems = [
   { href: '/ledger', label: 'Ledger', icon: BookOpen },
   { href: '/yahrzeits', label: 'Yahrzeits', icon: CandlestickChart },
   { href: '/import', label: 'Nedarim Import', icon: Upload },
+  { href: '/bulk-upload', label: 'Bulk Upload', icon: FileUp },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 

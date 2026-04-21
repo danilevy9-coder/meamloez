@@ -81,6 +81,50 @@ export async function updateMember(id: string, formData: FormData): Promise<void
   revalidatePath('/');
 }
 
+export async function bulkCreateMembers(
+  members: Array<{
+    full_name: string;
+    hebrew_name?: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    notes?: string;
+    membership_status?: MembershipStatus;
+  }>
+): Promise<{ inserted: number; errors: string[] }> {
+  const errors: string[] = [];
+  const valid = members.filter((m, i) => {
+    if (!m.full_name || m.full_name.trim() === '') {
+      errors.push(`Row ${i + 1}: Missing full name, skipped`);
+      return false;
+    }
+    return true;
+  });
+
+  if (valid.length === 0) {
+    return { inserted: 0, errors };
+  }
+
+  const rows = valid.map((m) => ({
+    full_name: m.full_name.trim(),
+    hebrew_name: m.hebrew_name?.trim() || null,
+    address: m.address?.trim() || null,
+    phone: m.phone?.trim() || null,
+    email: m.email?.trim() || null,
+    notes: m.notes?.trim() || null,
+    membership_status: m.membership_status || 'active',
+  }));
+
+  const { error } = await supabase.from('members').insert(rows);
+  if (error) {
+    return { inserted: 0, errors: [...errors, error.message] };
+  }
+
+  revalidatePath('/members');
+  revalidatePath('/');
+  return { inserted: rows.length, errors };
+}
+
 export async function deleteMember(id: string): Promise<void> {
   const { error } = await supabase.from('members').delete().eq('id', id);
   if (error) throw new Error(error.message);
