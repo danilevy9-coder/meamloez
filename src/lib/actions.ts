@@ -2,7 +2,7 @@
 
 import { supabase } from './supabase';
 import { revalidatePath } from 'next/cache';
-import { convertToILS, getShulRate, getLiveExchangeRate } from './exchange-rate';
+import { convertToILS, getExchangeRateForCurrency, getShulRate, getLiveExchangeRate } from './exchange-rate';
 import type {
   Member,
   FamilyMember,
@@ -11,8 +11,12 @@ import type {
   CurrencyCode,
   MembershipStatus,
   Relationship,
+  Gender,
+  IncomeCategory,
+  DonorLeadStatus,
   MemberBalance,
   LedgerEntryWithMember,
+  Donor,
 } from '@/types/database';
 
 // ===== MEMBERS =====
@@ -48,12 +52,18 @@ export async function searchMembers(query: string): Promise<Member[]> {
 }
 
 export async function createMember(formData: FormData): Promise<void> {
+  const fee = formData.get('membership_fee') as string;
   const { error } = await supabase.from('members').insert({
     full_name: formData.get('full_name') as string,
     hebrew_name: (formData.get('hebrew_name') as string) || null,
+    gender: (formData.get('gender') as Gender) || 'male',
     address: (formData.get('address') as string) || null,
     phone: (formData.get('phone') as string) || null,
     email: (formData.get('email') as string) || null,
+    spouse_name: (formData.get('spouse_name') as string) || null,
+    spouse_phone: (formData.get('spouse_phone') as string) || null,
+    spouse_email: (formData.get('spouse_email') as string) || null,
+    membership_fee: fee ? parseFloat(fee) : null,
     notes: (formData.get('notes') as string) || null,
     membership_status: (formData.get('membership_status') as MembershipStatus) || 'active',
   });
@@ -63,14 +73,20 @@ export async function createMember(formData: FormData): Promise<void> {
 }
 
 export async function updateMember(id: string, formData: FormData): Promise<void> {
+  const fee = formData.get('membership_fee') as string;
   const { error } = await supabase
     .from('members')
     .update({
       full_name: formData.get('full_name') as string,
       hebrew_name: (formData.get('hebrew_name') as string) || null,
+      gender: (formData.get('gender') as Gender) || 'male',
       address: (formData.get('address') as string) || null,
       phone: (formData.get('phone') as string) || null,
       email: (formData.get('email') as string) || null,
+      spouse_name: (formData.get('spouse_name') as string) || null,
+      spouse_phone: (formData.get('spouse_phone') as string) || null,
+      spouse_email: (formData.get('spouse_email') as string) || null,
+      membership_fee: fee ? parseFloat(fee) : null,
       notes: (formData.get('notes') as string) || null,
       membership_status: formData.get('membership_status') as MembershipStatus,
     })
@@ -132,6 +148,63 @@ export async function deleteMember(id: string): Promise<void> {
   revalidatePath('/');
 }
 
+// ===== DONORS =====
+
+export async function getDonors(): Promise<Donor[]> {
+  const { data, error } = await supabase
+    .from('donors')
+    .select('*')
+    .order('full_name');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function getDonor(id: string): Promise<Donor | null> {
+  const { data, error } = await supabase
+    .from('donors')
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (error) return null;
+  return data;
+}
+
+export async function createDonor(formData: FormData): Promise<void> {
+  const { error } = await supabase.from('donors').insert({
+    full_name: formData.get('full_name') as string,
+    phone: (formData.get('phone') as string) || null,
+    email: (formData.get('email') as string) || null,
+    notes: (formData.get('notes') as string) || null,
+    lead_status: (formData.get('lead_status') as DonorLeadStatus) || 'cold',
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath('/donors');
+  revalidatePath('/');
+}
+
+export async function updateDonor(id: string, formData: FormData): Promise<void> {
+  const { error } = await supabase
+    .from('donors')
+    .update({
+      full_name: formData.get('full_name') as string,
+      phone: (formData.get('phone') as string) || null,
+      email: (formData.get('email') as string) || null,
+      notes: (formData.get('notes') as string) || null,
+      lead_status: formData.get('lead_status') as DonorLeadStatus,
+    })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+  revalidatePath('/donors');
+  revalidatePath('/');
+}
+
+export async function deleteDonor(id: string): Promise<void> {
+  const { error } = await supabase.from('donors').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  revalidatePath('/donors');
+  revalidatePath('/');
+}
+
 // ===== FAMILY MEMBERS =====
 
 export async function getFamilyMembers(memberId: string): Promise<FamilyMember[]> {
@@ -146,6 +219,9 @@ export async function getFamilyMembers(memberId: string): Promise<FamilyMember[]
 
 export async function createFamilyMember(formData: FormData): Promise<void> {
   const memberId = formData.get('member_id') as string;
+  const yahrzeitDay = formData.get('yahrzeit_day') as string;
+  const yahrzeitMonth = formData.get('yahrzeit_month') as string;
+
   const { error } = await supabase.from('family_members').insert({
     member_id: memberId,
     name: formData.get('name') as string,
@@ -153,9 +229,35 @@ export async function createFamilyMember(formData: FormData): Promise<void> {
     relationship: formData.get('relationship') as Relationship,
     date_of_death_gregorian: (formData.get('date_of_death_gregorian') as string) || null,
     is_after_sunset: formData.get('is_after_sunset') === 'true',
+    yahrzeit_day: yahrzeitDay ? parseInt(yahrzeitDay, 10) : null,
+    yahrzeit_month: yahrzeitMonth ? parseInt(yahrzeitMonth, 10) : null,
   });
   if (error) throw new Error(error.message);
   revalidatePath(`/members/${memberId}`);
+  revalidatePath('/yahrzeits');
+  revalidatePath('/');
+}
+
+export async function updateFamilyMember(id: string, formData: FormData): Promise<void> {
+  const memberId = formData.get('member_id') as string;
+  const yahrzeitDay = formData.get('yahrzeit_day') as string;
+  const yahrzeitMonth = formData.get('yahrzeit_month') as string;
+
+  const { error } = await supabase
+    .from('family_members')
+    .update({
+      name: formData.get('name') as string,
+      hebrew_name: (formData.get('hebrew_name') as string) || null,
+      relationship: formData.get('relationship') as Relationship,
+      date_of_death_gregorian: (formData.get('date_of_death_gregorian') as string) || null,
+      is_after_sunset: formData.get('is_after_sunset') === 'true',
+      yahrzeit_day: yahrzeitDay ? parseInt(yahrzeitDay, 10) : null,
+      yahrzeit_month: yahrzeitMonth ? parseInt(yahrzeitMonth, 10) : null,
+    })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/members/${memberId}`);
+  revalidatePath('/yahrzeits');
   revalidatePath('/');
 }
 
@@ -163,6 +265,7 @@ export async function deleteFamilyMember(id: string, memberId: string): Promise<
   const { error } = await supabase.from('family_members').delete().eq('id', id);
   if (error) throw new Error(error.message);
   revalidatePath(`/members/${memberId}`);
+  revalidatePath('/yahrzeits');
   revalidatePath('/');
 }
 
@@ -171,7 +274,7 @@ export async function deleteFamilyMember(id: string, memberId: string): Promise<
 export async function getLedgerEntries(memberId?: string): Promise<LedgerEntryWithMember[]> {
   let query = supabase
     .from('ledger')
-    .select('*, members(full_name)')
+    .select('*, members(full_name), donors(full_name)')
     .order('created_at', { ascending: false });
 
   if (memberId) {
@@ -187,8 +290,10 @@ export async function createLedgerEntry(formData: FormData): Promise<void> {
   const currency = formData.get('currency') as CurrencyCode;
   const amountOriginal = parseFloat(formData.get('amount_original') as string);
   const type = formData.get('type') as LedgerType;
-  const memberId = formData.get('member_id') as string;
+  const memberId = (formData.get('member_id') as string) || null;
+  const donorId = (formData.get('donor_id') as string) || null;
   const description = formData.get('description') as string;
+  const incomeCategory = (formData.get('income_category') as IncomeCategory) || 'donation';
   const externalRef = (formData.get('external_ref') as string) || null;
 
   const useShulRate = formData.get('use_shul_rate') === 'true';
@@ -198,7 +303,7 @@ export async function createLedgerEntry(formData: FormData): Promise<void> {
       rate = await getShulRate();
     } else {
       const live = await getLiveExchangeRate();
-      rate = live.rate;
+      rate = getExchangeRateForCurrency(currency, live.rate, live.rateGbp);
     }
   }
 
@@ -206,7 +311,9 @@ export async function createLedgerEntry(formData: FormData): Promise<void> {
 
   const { error } = await supabase.from('ledger').insert({
     member_id: memberId,
+    donor_id: donorId,
     type,
+    income_category: incomeCategory,
     description,
     amount_original: amountOriginal,
     currency,
@@ -216,8 +323,9 @@ export async function createLedgerEntry(formData: FormData): Promise<void> {
   });
 
   if (error) throw new Error(error.message);
-  revalidatePath(`/members/${memberId}`);
+  if (memberId) revalidatePath(`/members/${memberId}`);
   revalidatePath('/ledger');
+  revalidatePath('/donors');
   revalidatePath('/');
 }
 
@@ -235,6 +343,7 @@ export async function batchCreatePayments(
   const rows = entries.map((e) => ({
     ...e,
     type: 'payment' as const,
+    income_category: 'donation' as const,
   }));
 
   const { error } = await supabase.from('ledger').insert(rows);
@@ -270,22 +379,28 @@ export async function getMemberBalance(memberId: string): Promise<MemberBalance 
 export async function getDashboardStats(): Promise<{
   totalOutstandingIls: number;
   totalOutstandingUsd: number;
+  totalDonationsIls: number;
+  totalMembershipFeesIls: number;
   recentPayments: LedgerEntryWithMember[];
   memberCount: number;
+  donorCount: number;
   shulRate: number;
   liveRate: number;
   liveRateSource: string;
   liveRateUpdatedAt: string | null;
 }> {
-  const [balancesRes, paymentsRes, membersRes, shulRate, liveRateData] = await Promise.all([
+  const [balancesRes, paymentsRes, membersRes, donorsRes, donationTotalRes, feeTotalRes, shulRate, liveRateData] = await Promise.all([
     supabase.from('member_balances').select('balance_ils'),
     supabase
       .from('ledger')
-      .select('*, members(full_name)')
+      .select('*, members(full_name), donors(full_name)')
       .eq('type', 'payment')
       .order('created_at', { ascending: false })
       .limit(10),
     supabase.from('members').select('id', { count: 'exact', head: true }),
+    supabase.from('donors').select('id', { count: 'exact', head: true }),
+    supabase.from('ledger').select('amount_ils').eq('type', 'payment').eq('income_category', 'donation'),
+    supabase.from('ledger').select('amount_ils').eq('type', 'payment').eq('income_category', 'membership_fee'),
     getShulRate(),
     getLiveExchangeRate(),
   ]);
@@ -295,11 +410,24 @@ export async function getDashboardStats(): Promise<{
     0
   );
 
+  const totalDonationsIls = (donationTotalRes.data ?? []).reduce(
+    (sum, d) => sum + (d as { amount_ils: number }).amount_ils,
+    0
+  );
+
+  const totalMembershipFeesIls = (feeTotalRes.data ?? []).reduce(
+    (sum, d) => sum + (d as { amount_ils: number }).amount_ils,
+    0
+  );
+
   return {
     totalOutstandingIls,
     totalOutstandingUsd: liveRateData.rate > 0 ? Math.round((totalOutstandingIls / liveRateData.rate) * 100) / 100 : 0,
+    totalDonationsIls,
+    totalMembershipFeesIls,
     recentPayments: (paymentsRes.data ?? []) as LedgerEntryWithMember[],
     memberCount: membersRes.count ?? 0,
+    donorCount: donorsRes.count ?? 0,
     shulRate,
     liveRate: liveRateData.rate,
     liveRateSource: liveRateData.source,
@@ -312,10 +440,11 @@ export async function getDashboardStats(): Promise<{
 export async function getAllFamilyMembersWithDeathDates(): Promise<
   Array<FamilyMember & { members: { full_name: string } }>
 > {
+  // Get family members that have either Hebrew yahrzeit fields or Gregorian death date
   const { data, error } = await supabase
     .from('family_members')
     .select('*, members(full_name)')
-    .not('date_of_death_gregorian', 'is', null);
+    .or('date_of_death_gregorian.not.is.null,yahrzeit_day.not.is.null');
   if (error) throw new Error(error.message);
   return (data ?? []) as Array<FamilyMember & { members: { full_name: string } }>;
 }

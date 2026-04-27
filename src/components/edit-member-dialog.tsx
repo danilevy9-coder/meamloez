@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { createMember } from '@/lib/actions';
+import { updateMember } from '@/lib/actions';
 import {
   Dialog,
   DialogContent,
@@ -20,48 +20,53 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import { toast } from 'sonner';
+import type { Member } from '@/types/database';
 
-export function AddMemberDialog() {
+interface Props {
+  member: Member;
+}
+
+export function EditMemberDialog({ member }: Props) {
   const [open, setOpen] = useState(false);
 
   async function handleSubmit(formData: FormData) {
     try {
-      await createMember(formData);
-      toast.success('Member added successfully');
+      await updateMember(member.id, formData);
+      toast.success('Member updated');
       setOpen(false);
     } catch (e) {
-      toast.error('Failed to add member: ' + (e as Error).message);
+      toast.error('Failed: ' + (e as Error).message);
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button />}>
-        <Plus className="mr-2 h-4 w-4" />
-        Add Member
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>
+        <Pencil className="mr-2 h-3 w-3" />
+        Edit
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add New Member</DialogTitle>
+          <DialogTitle>Edit Member</DialogTitle>
         </DialogHeader>
         <form action={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="full_name">Full Name *</Label>
-              <Input id="full_name" name="full_name" required />
+              <Label htmlFor="edit_full_name">Full Name *</Label>
+              <Input id="edit_full_name" name="full_name" defaultValue={member.full_name} required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="hebrew_name">Hebrew Name</Label>
-              <Input id="hebrew_name" name="hebrew_name" dir="rtl" />
+              <Label htmlFor="edit_hebrew_name">Hebrew Name</Label>
+              <Input id="edit_hebrew_name" name="hebrew_name" defaultValue={member.hebrew_name ?? ''} dir="rtl" />
             </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="gender">Gender *</Label>
-              <Select name="gender" required defaultValue="male">
+              <Label htmlFor="edit_gender">Gender *</Label>
+              <Select name="gender" defaultValue={member.gender || 'male'}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -72,8 +77,8 @@ export function AddMemberDialog() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="membership_status">Status</Label>
-              <Select name="membership_status" defaultValue="active">
+              <Label htmlFor="edit_membership_status">Status</Label>
+              <Select name="membership_status" defaultValue={member.membership_status}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -88,18 +93,18 @@ export function AddMemberDialog() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="address">Address</Label>
-            <Input id="address" name="address" />
+            <Label htmlFor="edit_address">Address</Label>
+            <Input id="edit_address" name="address" defaultValue={member.address ?? ''} />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input id="phone" name="phone" type="tel" />
+              <Label htmlFor="edit_phone">Phone</Label>
+              <Input id="edit_phone" name="phone" type="tel" defaultValue={member.phone ?? ''} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" />
+              <Label htmlFor="edit_email">Email</Label>
+              <Input id="edit_email" name="email" type="email" defaultValue={member.email ?? ''} />
             </div>
           </div>
 
@@ -107,46 +112,46 @@ export function AddMemberDialog() {
             <p className="text-sm font-medium mb-3">Spouse / Contact Info</p>
             <div className="space-y-3">
               <div className="space-y-2">
-                <Label htmlFor="spouse_name">Spouse Name (Wife)</Label>
-                <Input id="spouse_name" name="spouse_name" />
+                <Label htmlFor="edit_spouse_name">Spouse Name (Wife)</Label>
+                <Input id="edit_spouse_name" name="spouse_name" defaultValue={member.spouse_name ?? ''} />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="spouse_phone">Spouse Phone</Label>
-                  <Input id="spouse_phone" name="spouse_phone" type="tel" />
+                  <Label htmlFor="edit_spouse_phone">Spouse Phone</Label>
+                  <Input id="edit_spouse_phone" name="spouse_phone" type="tel" defaultValue={member.spouse_phone ?? ''} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="spouse_email">Spouse Email</Label>
-                  <Input id="spouse_email" name="spouse_email" type="email" />
+                  <Label htmlFor="edit_spouse_email">Spouse Email</Label>
+                  <Input id="edit_spouse_email" name="spouse_email" type="email" defaultValue={member.spouse_email ?? ''} />
                 </div>
               </div>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="membership_fee">Monthly Membership Fee (ILS)</Label>
+            <Label htmlFor="edit_membership_fee">Monthly Membership Fee (ILS)</Label>
             <Input
-              id="membership_fee"
+              id="edit_membership_fee"
               name="membership_fee"
               type="number"
               step="0.01"
               min="0"
-              placeholder="e.g., 100"
+              defaultValue={member.membership_fee ?? ''}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
+            <Label htmlFor="edit_notes">Notes</Label>
             <Textarea
-              id="notes"
+              id="edit_notes"
               name="notes"
-              placeholder="Any notes about this member..."
+              defaultValue={member.notes ?? ''}
               rows={2}
             />
           </div>
 
           <Button type="submit" className="w-full">
-            Add Member
+            Save Changes
           </Button>
         </form>
       </DialogContent>

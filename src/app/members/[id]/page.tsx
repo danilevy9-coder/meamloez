@@ -8,8 +8,9 @@ import {
   getMemberBalance,
   getLedgerEntries,
   getMembers,
+  getDonors,
 } from '@/lib/actions';
-import { getHebrewDateOfDeath, formatHebrewDate, getNextYahrzeit } from '@/lib/yahrzeit';
+import { getNextYahrzeit, formatHebrewDate, gregorianToHebrewDayMonth } from '@/lib/yahrzeit';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -27,6 +28,8 @@ import { format } from 'date-fns';
 import { AddFamilyMemberDialog } from '@/components/add-family-member-dialog';
 import { FamilyMemberCard } from '@/components/family-member-card';
 import { AddLedgerDialog } from '@/components/add-ledger-dialog';
+import { EditMemberDialog } from '@/components/edit-member-dialog';
+import { currencySymbol } from '@/lib/currency';
 
 export default async function MemberProfilePage({
   params,
@@ -35,13 +38,14 @@ export default async function MemberProfilePage({
 }) {
   const { id } = await params;
 
-  const [member, familyMembers, balance, ledgerEntries, allMembers] =
+  const [member, familyMembers, balance, ledgerEntries, allMembers, allDonors] =
     await Promise.all([
       getMember(id),
       getFamilyMembers(id),
       getMemberBalance(id),
       getLedgerEntries(id),
       getMembers(),
+      getDonors(),
     ]);
 
   if (!member) notFound();
@@ -58,7 +62,7 @@ export default async function MemberProfilePage({
           </Button>
         </Link>
         <div className="flex-1">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold">{member.full_name}</h1>
             <Badge
               variant={
@@ -67,6 +71,8 @@ export default async function MemberProfilePage({
             >
               {member.membership_status}
             </Badge>
+            <Badge variant="outline">{member.gender}</Badge>
+            <EditMemberDialog member={member} />
           </div>
           {member.hebrew_name && (
             <p className="text-muted-foreground" dir="rtl">
@@ -78,6 +84,16 @@ export default async function MemberProfilePage({
             {member.email && <span>{member.email}</span>}
             {member.address && <span>{member.address}</span>}
           </div>
+          {/* Spouse info */}
+          {member.spouse_name && (
+            <div className="mt-2 text-sm text-muted-foreground border-l-2 pl-3">
+              <p className="font-medium text-foreground">Spouse: {member.spouse_name}</p>
+              <div className="flex flex-wrap gap-4">
+                {member.spouse_phone && <span>{member.spouse_phone}</span>}
+                {member.spouse_email && <span>{member.spouse_email}</span>}
+              </div>
+            </div>
+          )}
           {member.notes && (
             <p className="mt-2 text-sm text-muted-foreground italic border-l-2 pl-3">
               {member.notes}
@@ -86,8 +102,8 @@ export default async function MemberProfilePage({
         </div>
       </div>
 
-      {/* Balance Card */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* Balance & Fee Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Pledges</CardTitle>
@@ -131,6 +147,18 @@ export default async function MemberProfilePage({
             </p>
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Monthly Fee</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">
+              {member.membership_fee
+                ? `\u20AA${member.membership_fee.toLocaleString()}/mo`
+                : '—'}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Separator />
@@ -148,20 +176,25 @@ export default async function MemberProfilePage({
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {familyMembers.map((fm) => {
+              let day = fm.yahrzeit_day;
+              let month = fm.yahrzeit_month;
+
+              // Fallback: derive from Gregorian date
+              if ((!day || !month) && fm.date_of_death_gregorian) {
+                const derived = gregorianToHebrewDayMonth(
+                  fm.date_of_death_gregorian,
+                  fm.is_after_sunset
+                );
+                day = derived.day;
+                month = derived.month;
+              }
+
               let hebrewDeathDate: string | undefined;
               let nextYahrzeitDisplay: string | undefined;
 
-              if (fm.date_of_death_gregorian) {
-                const hdate = getHebrewDateOfDeath(
-                  fm.date_of_death_gregorian,
-                  fm.is_after_sunset
-                );
-                hebrewDeathDate = formatHebrewDate(hdate);
-
-                const yahrzeit = getNextYahrzeit(
-                  fm.date_of_death_gregorian,
-                  fm.is_after_sunset
-                );
+              if (day && month) {
+                hebrewDeathDate = formatHebrewDate(day, month);
+                const yahrzeit = getNextYahrzeit(day, month);
                 nextYahrzeitDisplay =
                   yahrzeit.days_until === 0
                     ? 'Yahrzeit TODAY'
@@ -194,6 +227,7 @@ export default async function MemberProfilePage({
           <div className="flex gap-2">
             <AddLedgerDialog
               members={allMembers}
+              donors={allDonors}
               defaultMemberId={id}
               defaultType="pledge"
               trigger={
@@ -204,6 +238,7 @@ export default async function MemberProfilePage({
             />
             <AddLedgerDialog
               members={allMembers}
+              donors={allDonors}
               defaultMemberId={id}
               defaultType="payment"
               trigger={
@@ -220,6 +255,7 @@ export default async function MemberProfilePage({
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Category</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead className="text-right hidden sm:table-cell">
@@ -231,7 +267,7 @@ export default async function MemberProfilePage({
               {ledgerEntries.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="text-center text-muted-foreground py-8"
                   >
                     No ledger entries yet.
@@ -252,9 +288,12 @@ export default async function MemberProfilePage({
                         {entry.type}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {entry.income_category === 'membership_fee' ? 'Membership Fee' : 'Donation'}
+                    </TableCell>
                     <TableCell>{entry.description}</TableCell>
                     <TableCell className="text-right font-medium">
-                      {entry.currency === 'ILS' ? '\u20AA' : '$'}
+                      {currencySymbol(entry.currency)}
                       {entry.amount_original.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right hidden sm:table-cell text-muted-foreground">

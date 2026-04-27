@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select';
 import { UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
+import { HEBREW_MONTHS } from '@/lib/yahrzeit';
 
 interface Props {
   memberId: string;
@@ -80,28 +81,39 @@ export function AddFamilyMemberDialog({ memberId }: Props) {
             </Select>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="date_of_death_gregorian">
-                Date of Death (Gregorian)
-              </Label>
-              <Input
-                id="date_of_death_gregorian"
-                name="date_of_death_gregorian"
-                type="date"
-              />
-            </div>
-            <div className="flex items-end gap-2 pb-0.5">
-              <input
-                type="checkbox"
-                id="is_after_sunset"
-                name="is_after_sunset"
-                value="true"
-                className="rounded"
-              />
-              <Label htmlFor="is_after_sunset" className="text-sm">
-                After sunset?
-              </Label>
+          <div className="border-t pt-4">
+            <p className="text-sm font-medium mb-3">Yahrzeit (Hebrew Date of Death)</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="yahrzeit_day">Day</Label>
+                <Select name="yahrzeit_day">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Day..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 30 }, (_, i) => i + 1).map((d) => (
+                      <SelectItem key={d} value={String(d)}>
+                        {d}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="yahrzeit_month">Month</Label>
+                <Select name="yahrzeit_month">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Month..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HEBREW_MONTHS.map((m) => (
+                      <SelectItem key={m.value} value={String(m.value)}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 

@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { parseNedarimCSV, matchNedarimRows } from '@/lib/fuzzy-match';
 import { batchCreatePayments } from '@/lib/actions';
-import { convertToILS } from '@/lib/exchange-rate';
+import { convertToILS } from '@/lib/currency';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

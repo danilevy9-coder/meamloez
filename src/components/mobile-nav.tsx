@@ -17,6 +17,7 @@ import {
   Upload,
   Settings,
   FileUp,
+  Heart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -24,6 +25,7 @@ import { useState } from 'react';
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/members', label: 'Members', icon: Users },
+  { href: '/donors', label: 'Donors', icon: Heart },
   { href: '/ledger', label: 'Ledger', icon: BookOpen },
   { href: '/yahrzeits', label: 'Yahrzeits', icon: CandlestickChart },
   { href: '/import', label: 'Nedarim Import', icon: Upload },

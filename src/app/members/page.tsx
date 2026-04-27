@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { getMembers } from '@/lib/actions';
 import { AddMemberDialog } from '@/components/add-member-dialog';
+import { ExportMembersButton } from '@/components/export-members-button';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -25,7 +26,10 @@ export default async function MembersPage() {
             {members.length} members registered
           </p>
         </div>
-        <AddMemberDialog />
+        <div className="flex gap-2">
+          <ExportMembersButton members={members} />
+          <AddMemberDialog />
+        </div>
       </div>
 
       <div className="rounded-lg border">
@@ -36,13 +40,14 @@ export default async function MembersPage() {
               <TableHead className="hidden sm:table-cell">Hebrew Name</TableHead>
               <TableHead className="hidden md:table-cell">Phone</TableHead>
               <TableHead className="hidden lg:table-cell">Email</TableHead>
+              <TableHead className="hidden lg:table-cell">Spouse</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {members.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                   No members yet. Add your first member above.
                 </TableCell>
               </TableRow>
@@ -65,6 +70,9 @@ export default async function MembersPage() {
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-muted-foreground">
                     {m.email ?? '—'}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell text-muted-foreground">
+                    {m.spouse_name ?? '—'}
                   </TableCell>
                   <TableCell>
                     <Badge

@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { getAllFamilyMembersWithDeathDates } from '@/lib/actions';
-import { getNextYahrzeit, formatHebrewDate, getHebrewDateOfDeath } from '@/lib/yahrzeit';
+import { getNextYahrzeit, formatHebrewDate, gregorianToHebrewDayMonth } from '@/lib/yahrzeit';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
@@ -12,20 +12,31 @@ export default async function YahrzeitsPage() {
 
   const yahrzeits = familyMembers
     .map((fm) => {
-      const hdate = getHebrewDateOfDeath(
-        fm.date_of_death_gregorian!,
-        fm.is_after_sunset
-      );
-      const yahrzeit = getNextYahrzeit(
-        fm.date_of_death_gregorian!,
-        fm.is_after_sunset
-      );
+      let day = fm.yahrzeit_day;
+      let month = fm.yahrzeit_month;
+
+      // Fallback: derive from Gregorian date if Hebrew fields not set
+      if ((!day || !month) && fm.date_of_death_gregorian) {
+        const derived = gregorianToHebrewDayMonth(
+          fm.date_of_death_gregorian,
+          fm.is_after_sunset
+        );
+        day = derived.day;
+        month = derived.month;
+      }
+
+      if (!day || !month) return null;
+
+      const hebrewDate = formatHebrewDate(day, month);
+      const yahrzeit = getNextYahrzeit(day, month);
+
       return {
         ...fm,
-        hebrew_date: formatHebrewDate(hdate),
+        hebrew_date: hebrewDate,
         yahrzeit,
       };
     })
+    .filter((y): y is NonNullable<typeof y> => y !== null)
     .sort((a, b) => a.yahrzeit.days_until - b.yahrzeit.days_until);
 
   const upcoming = yahrzeits.filter((y) => y.yahrzeit.days_until <= 30);

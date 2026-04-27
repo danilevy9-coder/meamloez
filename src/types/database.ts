@@ -1,15 +1,23 @@
 export type MembershipStatus = 'active' | 'inactive' | 'honorary' | 'suspended';
 export type LedgerType = 'pledge' | 'payment';
-export type CurrencyCode = 'USD' | 'ILS';
+export type CurrencyCode = 'USD' | 'ILS' | 'GBP';
 export type Relationship = 'wife' | 'husband' | 'child' | 'parent' | 'sibling' | 'other';
+export type Gender = 'male' | 'female';
+export type IncomeCategory = 'donation' | 'membership_fee';
+export type DonorLeadStatus = 'cold' | 'warm' | 'hot' | 'regular';
 
 export interface Member {
   id: string;
   full_name: string;
   hebrew_name: string | null;
+  gender: Gender;
   address: string | null;
   phone: string | null;
   email: string | null;
+  spouse_name: string | null;
+  spouse_phone: string | null;
+  spouse_email: string | null;
+  membership_fee: number | null;
   notes: string | null;
   membership_status: MembershipStatus;
   created_at: string;
@@ -24,14 +32,29 @@ export interface FamilyMember {
   relationship: Relationship;
   date_of_death_gregorian: string | null;
   is_after_sunset: boolean;
+  yahrzeit_day: number | null;
+  yahrzeit_month: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Donor {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  notes: string | null;
+  lead_status: DonorLeadStatus;
   created_at: string;
   updated_at: string;
 }
 
 export interface LedgerEntry {
   id: string;
-  member_id: string;
+  member_id: string | null;
+  donor_id: string | null;
   type: LedgerType;
+  income_category: IncomeCategory;
   description: string;
   amount_original: number;
   currency: CurrencyCode;
@@ -64,6 +87,7 @@ export interface MemberWithFamily extends Member {
 
 export interface LedgerEntryWithMember extends LedgerEntry {
   members: { full_name: string } | null;
+  donors: { full_name: string } | null;
 }
 
 // Nedarim Plus CSV row
