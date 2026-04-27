@@ -43,15 +43,19 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
       reader.onload = (evt) => {
         try {
           const text = evt.target?.result as string;
-          const rows = parseNedarimCSV(text);
+          const parsed = parseNedarimCSV(text);
 
-          if (rows.length === 0) {
-            toast.error('No valid rows found in file. Check that headers include שם and סכום (or Name and Amount).');
+          if (parsed.rows.length === 0) {
+            const mappedStr = parsed.headersMapped.slice(0, 8).join(', ');
+            toast.error(
+              `No valid rows found (${parsed.totalLines} lines, mapped headers: ${mappedStr || 'none'}). Need "name" and "amount" columns.`,
+              { duration: 8000 }
+            );
             setIsParsing(false);
             return;
           }
 
-          const results = matchNedarimRows(rows, members, pendingPledges);
+          const results = matchNedarimRows(parsed.rows, members, pendingPledges);
           setMatches(results);
 
           // Auto-select high confidence matches
@@ -61,7 +65,7 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
           });
           setSelected(autoSelect);
 
-          toast.success(`Parsed ${rows.length} rows, found ${autoSelect.size} high-confidence matches`);
+          toast.success(`Parsed ${parsed.rows.length} rows, found ${autoSelect.size} high-confidence matches`);
         } catch (err) {
           toast.error('Failed to parse file: ' + (err as Error).message);
         } finally {

@@ -98,7 +98,7 @@ const HEBREW_HEADER_MAP: Record<string, string> = {
  * Map Hebrew currency names to CurrencyCode
  */
 function parseCurrency(raw: string): 'USD' | 'ILS' | 'GBP' {
-  const trimmed = raw.trim();
+  const trimmed = stripInvisible(raw);
   if (trimmed === 'שקל' || trimmed === 'ש"ח' || trimmed === 'NIS' || trimmed === 'ILS') return 'ILS';
   if (trimmed === 'דולר' || trimmed === 'USD' || trimmed === '$') return 'USD';
   if (trimmed === 'לירה' || trimmed === 'GBP' || trimmed === '£') return 'GBP';
@@ -116,12 +116,27 @@ function detectDelimiter(firstLine: string): string {
 }
 
 /**
- * Normalize a header: try Hebrew mapping first, then fall back to English patterns
+ * Strip invisible Unicode formatting characters (RTL/LTR marks, zero-width spaces, etc.)
+ * These are commonly embedded in Hebrew CSV exports and break exact string matching.
+ */
+function stripInvisible(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u00A0]/g, '').trim();
+}
+
+/**
+ * Normalize a header: strip invisible chars, try Hebrew mapping, then English patterns
  */
 function normalizeHeader(raw: string): string {
-  const trimmed = raw.trim();
+  const trimmed = stripInvisible(raw);
   // Try exact Hebrew match
   if (HEBREW_HEADER_MAP[trimmed]) return HEBREW_HEADER_MAP[trimmed];
+  // Try contains-based Hebrew match (in case of extra characters)
+  for (const [hebrewKey, mapped] of Object.entries(HEBREW_HEADER_MAP)) {
+    if (trimmed.includes(hebrewKey) || hebrewKey.includes(trimmed)) {
+      return mapped;
+    }
+  }
   // Try lowercase English match
   const lower = trimmed.toLowerCase();
   if (lower === 'payer name' || lower === 'name' || lower === 'donor') return 'name';
@@ -133,18 +148,25 @@ function normalizeHeader(raw: string): string {
   return lower;
 }
 
-export function parseNedarimCSV(csvText: string): NedarimRow[] {
+export interface ParseResult {
+  rows: NedarimRow[];
+  headersMapped: string[];
+  headersRaw: string[];
+  totalLines: number;
+}
+
+export function parseNedarimCSV(csvText: string): ParseResult {
   // Strip BOM (common in Hebrew CSV exports from Windows/Israeli systems)
   const cleaned = csvText.replace(/^\uFEFF/, '');
   // Normalize line endings and split
   const lines = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n');
-  if (lines.length < 2) return [];
+  if (lines.length < 2) return { rows: [], headersMapped: [], headersRaw: [], totalLines: lines.length };
 
   const delimiter = detectDelimiter(lines[0]);
   const rawHeaders = lines[0].split(delimiter).map((h) => h.trim());
   const headers = rawHeaders.map(normalizeHeader);
 
-  return lines.slice(1).filter((l) => l.trim()).map((line) => {
+  const rows = lines.slice(1).filter((l) => l.trim()).map((line) => {
     const values = line.split(delimiter).map((v) => v.trim());
     const row: Record<string, string> = {};
     headers.forEach((h, i) => {
@@ -155,7 +177,7 @@ export function parseNedarimCSV(csvText: string): NedarimRow[] {
     const currencyRaw = row['currency'] || '';
 
     return {
-      payer_name: row['name'] || '',
+      payer_name: stripInvisible(row['name'] || ''),
       amount: isNaN(amount) ? 0 : amount,
       currency: parseCurrency(currencyRaw),
       date: row['date'] || '',
@@ -163,4 +185,6 @@ export function parseNedarimCSV(csvText: string): NedarimRow[] {
       description: row['category'] || row['notes'] || '',
     };
   }).filter((r) => r.payer_name && r.amount > 0);
+
+  return { rows, headersMapped: headers, headersRaw: rawHeaders, totalLines: lines.length };
 }
