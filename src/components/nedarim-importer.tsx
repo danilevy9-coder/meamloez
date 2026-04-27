@@ -29,6 +29,7 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
   const [matches, setMatches] = useState<ReconciliationMatch[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [isCommitting, setIsCommitting] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
   const [fileName, setFileName] = useState<string>('');
 
   const handleFileUpload = useCallback(
@@ -37,29 +38,41 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
       if (!file) return;
 
       setFileName(file.name);
+      setIsParsing(true);
       const reader = new FileReader();
       reader.onload = (evt) => {
-        const text = evt.target?.result as string;
-        const rows = parseNedarimCSV(text);
+        try {
+          const text = evt.target?.result as string;
+          const rows = parseNedarimCSV(text);
 
-        if (rows.length === 0) {
-          toast.error('No valid rows found in CSV');
-          return;
+          if (rows.length === 0) {
+            toast.error('No valid rows found in file. Check that headers include שם and סכום (or Name and Amount).');
+            setIsParsing(false);
+            return;
+          }
+
+          const results = matchNedarimRows(rows, members, pendingPledges);
+          setMatches(results);
+
+          // Auto-select high confidence matches
+          const autoSelect = new Set<number>();
+          results.forEach((m, i) => {
+            if (m.status === 'high') autoSelect.add(i);
+          });
+          setSelected(autoSelect);
+
+          toast.success(`Parsed ${rows.length} rows, found ${autoSelect.size} high-confidence matches`);
+        } catch (err) {
+          toast.error('Failed to parse file: ' + (err as Error).message);
+        } finally {
+          setIsParsing(false);
         }
-
-        const results = matchNedarimRows(rows, members, pendingPledges);
-        setMatches(results);
-
-        // Auto-select high confidence matches
-        const autoSelect = new Set<number>();
-        results.forEach((m, i) => {
-          if (m.status === 'high') autoSelect.add(i);
-        });
-        setSelected(autoSelect);
-
-        toast.success(`Parsed ${rows.length} rows, found ${autoSelect.size} high-confidence matches`);
       };
-      reader.readAsText(file);
+      reader.onerror = () => {
+        toast.error('Failed to read file');
+        setIsParsing(false);
+      };
+      reader.readAsText(file, 'UTF-8');
     },
     [members, pendingPledges]
   );
@@ -150,18 +163,31 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
         </CardHeader>
         <CardContent>
           <label className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 cursor-pointer hover:bg-muted/50 transition-colors">
-            <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-            <span className="text-sm font-medium">
-              {fileName || 'Click to upload CSV file'}
-            </span>
-            <span className="text-xs text-muted-foreground mt-1">
-              Supports Nedarim Plus payment exports
-            </span>
+            {isParsing ? (
+              <>
+                <div className="h-8 w-8 mb-2 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                <span className="text-sm font-medium">Processing {fileName}...</span>
+                <span className="text-xs text-muted-foreground mt-1">
+                  Matching names against members
+                </span>
+              </>
+            ) : (
+              <>
+                <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                <span className="text-sm font-medium">
+                  {fileName || 'Click to upload CSV file'}
+                </span>
+                <span className="text-xs text-muted-foreground mt-1">
+                  Supports Nedarim Plus payment exports (Hebrew or English)
+                </span>
+              </>
+            )}
             <input
               type="file"
-              accept=".csv"
+              accept=".csv,.tsv,.txt"
               className="hidden"
               onChange={handleFileUpload}
+              disabled={isParsing}
             />
           </label>
         </CardContent>

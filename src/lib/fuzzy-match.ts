@@ -134,14 +134,17 @@ function normalizeHeader(raw: string): string {
 }
 
 export function parseNedarimCSV(csvText: string): NedarimRow[] {
-  const lines = csvText.trim().split('\n');
+  // Strip BOM (common in Hebrew CSV exports from Windows/Israeli systems)
+  const cleaned = csvText.replace(/^\uFEFF/, '');
+  // Normalize line endings and split
+  const lines = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n');
   if (lines.length < 2) return [];
 
   const delimiter = detectDelimiter(lines[0]);
   const rawHeaders = lines[0].split(delimiter).map((h) => h.trim());
   const headers = rawHeaders.map(normalizeHeader);
 
-  return lines.slice(1).map((line) => {
+  return lines.slice(1).filter((l) => l.trim()).map((line) => {
     const values = line.split(delimiter).map((v) => v.trim());
     const row: Record<string, string> = {};
     headers.forEach((h, i) => {
