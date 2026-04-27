@@ -98,6 +98,8 @@ export interface NedarimRow {
   date: string;
   reference: string;
   description: string;
+  email?: string;
+  phone?: string;
 }
 
 export interface ReconciliationMatch {

@@ -31,6 +31,7 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
   const [isCommitting, setIsCommitting] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [fileName, setFileName] = useState<string>('');
+  const [rawPreview, setRawPreview] = useState<string>('');
 
   const handleFileUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -39,11 +40,14 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
 
       setFileName(file.name);
       setIsParsing(true);
+      setRawPreview('');
+      setMatches([]);
       const reader = new FileReader();
       reader.onload = (evt) => {
         try {
           const text = evt.target?.result as string;
           const parsed = parseNedarimCSV(text);
+          setRawPreview(parsed.preview);
 
           if (parsed.rows.length === 0) {
             const mappedStr = parsed.headersMapped.slice(0, 8).join(', ');
@@ -58,7 +62,6 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
           const results = matchNedarimRows(parsed.rows, members, pendingPledges);
           setMatches(results);
 
-          // Auto-select high confidence matches
           const autoSelect = new Set<number>();
           results.forEach((m, i) => {
             if (m.status === 'high') autoSelect.add(i);
@@ -125,11 +128,19 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
       setMatches([]);
       setSelected(new Set());
       setFileName('');
+      setRawPreview('');
     } catch (e) {
       toast.error('Failed: ' + (e as Error).message);
     } finally {
       setIsCommitting(false);
     }
+  }
+
+  function handleClear() {
+    setMatches([]);
+    setSelected(new Set());
+    setFileName('');
+    setRawPreview('');
   }
 
   const statusIcon = (status: ReconciliationMatch['status']) => {
@@ -163,16 +174,23 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
       {/* Upload Zone */}
       <Card>
         <CardHeader>
-          <CardTitle>Upload Nedarim Plus CSV</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Upload Nedarim Plus CSV</CardTitle>
+            {fileName && (
+              <Button variant="outline" size="sm" onClick={handleClear}>
+                Clear
+              </Button>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <label className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 cursor-pointer hover:bg-muted/50 transition-colors">
             {isParsing ? (
               <>
                 <div className="h-8 w-8 mb-2 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
                 <span className="text-sm font-medium">Processing {fileName}...</span>
                 <span className="text-xs text-muted-foreground mt-1">
-                  Matching names against members
+                  Matching names, emails, and phones against members
                 </span>
               </>
             ) : (
@@ -194,6 +212,16 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
               disabled={isParsing}
             />
           </label>
+
+          {/* Raw file preview */}
+          {rawPreview && matches.length === 0 && (
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">File preview (first 3 lines):</p>
+              <pre className="text-xs overflow-x-auto whitespace-pre-wrap break-all" dir="auto">
+                {rawPreview}
+              </pre>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -206,15 +234,7 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
                 Proposed Matches ({matches.length} rows)
               </CardTitle>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setMatches([]);
-                    setSelected(new Set());
-                    setFileName('');
-                  }}
-                >
+                <Button variant="outline" size="sm" onClick={handleClear}>
                   Clear
                 </Button>
                 <Button
@@ -282,7 +302,7 @@ export function NedarimImporter({ members, pendingPledges, shulRate }: Props) {
                         </div>
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap">
-                        {match.nedarim_row.currency === 'ILS' ? '\u20AA' : '$'}
+                        {match.nedarim_row.currency === 'ILS' ? '\u20AA' : match.nedarim_row.currency === 'GBP' ? '\u00A3' : '$'}
                         {match.nedarim_row.amount.toLocaleString()}
                       </TableCell>
                       <TableCell>

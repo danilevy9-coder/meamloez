@@ -2,7 +2,7 @@ import Fuse, { type IFuseOptions } from 'fuse.js';
 import type { Member, NedarimRow, LedgerEntry, ReconciliationMatch } from '@/types/database';
 
 const fuseOptions: IFuseOptions<Member> = {
-  keys: ['full_name'],
+  keys: ['full_name', 'hebrew_name', 'spouse_name'],
   threshold: 0.4,
   includeScore: true,
 };
@@ -14,11 +14,58 @@ export function matchNedarimRows(
 ): ReconciliationMatch[] {
   const fuse = new Fuse(members, fuseOptions);
 
-  return rows.map((row) => {
-    const results = fuse.search(row.payer_name);
-    const bestMatch = results[0];
+  // Build lookup maps for email and phone exact matching
+  const emailMap = new Map<string, Member>();
+  const phoneMap = new Map<string, Member>();
+  for (const m of members) {
+    if (m.email) emailMap.set(m.email.toLowerCase().trim(), m);
+    if (m.spouse_email) emailMap.set(m.spouse_email.toLowerCase().trim(), m);
+    if (m.phone) {
+      const norm = normalizePhone(m.phone);
+      if (norm) phoneMap.set(norm, m);
+    }
+    if (m.spouse_phone) {
+      const norm = normalizePhone(m.spouse_phone);
+      if (norm) phoneMap.set(norm, m);
+    }
+  }
 
-    if (!bestMatch || bestMatch.score === undefined) {
+  return rows.map((row) => {
+    let member: Member | null = null;
+    let confidence = 0;
+
+    // 1. Try exact email match first (highest confidence)
+    if (row.email) {
+      const byEmail = emailMap.get(row.email.toLowerCase().trim());
+      if (byEmail) {
+        member = byEmail;
+        confidence = 98;
+      }
+    }
+
+    // 2. Try exact phone match
+    if (!member && row.phone) {
+      const norm = normalizePhone(row.phone);
+      if (norm) {
+        const byPhone = phoneMap.get(norm);
+        if (byPhone) {
+          member = byPhone;
+          confidence = 95;
+        }
+      }
+    }
+
+    // 3. Fall back to fuzzy name match
+    if (!member) {
+      const results = fuse.search(row.payer_name);
+      const bestMatch = results[0];
+      if (bestMatch && bestMatch.score !== undefined) {
+        member = bestMatch.item;
+        confidence = Math.round((1 - bestMatch.score) * 100);
+      }
+    }
+
+    if (!member) {
       return {
         nedarim_row: row,
         matched_member: null,
@@ -28,13 +75,9 @@ export function matchNedarimRows(
       };
     }
 
-    const member = bestMatch.item;
-    const confidence = Math.round((1 - bestMatch.score) * 100);
-
     // Find a pending pledge for this member that could match this payment
     const matchingPledge = pendingPledges.find((p) => {
-      if (p.member_id !== member.id) return false;
-      // Check if amounts are close (within 5% tolerance for exchange rate drift)
+      if (p.member_id !== member!.id) return false;
       const pledgeAmount = p.amount_original;
       const tolerance = pledgeAmount * 0.05;
       return Math.abs(pledgeAmount - row.amount) <= tolerance;
@@ -59,91 +102,74 @@ export function matchNedarimRows(
   });
 }
 
+function normalizePhone(phone: string): string {
+  // Strip everything except digits
+  let digits = phone.replace(/\D/g, '');
+  // Remove leading 972 (Israel country code)
+  if (digits.startsWith('972')) digits = digits.slice(3);
+  // Remove leading 0
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  return digits;
+}
+
+/**
+ * Strip invisible Unicode formatting characters (RTL/LTR marks, zero-width spaces, etc.)
+ */
+function stripInvisible(str: string): string {
+  return str.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u00A0]/g, '').trim();
+}
+
 /**
  * Hebrew header mapping for Nedarim Plus exports.
- * The export is tab-separated with Hebrew column names.
  */
 const HEBREW_HEADER_MAP: Record<string, string> = {
-  // Name
   'שם': 'name',
-  // Amount
   'סכום': 'amount',
-  // Currency
   'מטבע': 'currency',
-  // Transaction date
   'תאריך עסקה': 'date',
-  // Confirmation number
   'מספר אישור': 'reference',
-  // Category
   'קטגוריה': 'category',
-  // Notes
   'הערות': 'notes',
-  // Email
   'מייל': 'email',
-  // Phone
   'טלפון': 'phone',
-  // ID number
   'מספר זהות': 'id_number',
-  // Address
   'כתובת': 'address',
-  // Installments
   'תשלומים': 'installments',
-  // Transaction number
   'מספר עסקה': 'transaction_number',
-  // Receipt number
   'מספר קבלה': 'receipt_number',
 };
 
-/**
- * Map Hebrew currency names to CurrencyCode
- */
 function parseCurrency(raw: string): 'USD' | 'ILS' | 'GBP' {
   const trimmed = stripInvisible(raw);
   if (trimmed === 'שקל' || trimmed === 'ש"ח' || trimmed === 'NIS' || trimmed === 'ILS') return 'ILS';
   if (trimmed === 'דולר' || trimmed === 'USD' || trimmed === '$') return 'USD';
   if (trimmed === 'לירה' || trimmed === 'GBP' || trimmed === '£') return 'GBP';
-  // Default to ILS for Hebrew exports
   return 'ILS';
 }
 
-/**
- * Detect whether the file is tab-separated or comma-separated
- */
 function detectDelimiter(firstLine: string): string {
   const tabs = (firstLine.match(/\t/g) ?? []).length;
   const commas = (firstLine.match(/,/g) ?? []).length;
   return tabs >= commas ? '\t' : ',';
 }
 
-/**
- * Strip invisible Unicode formatting characters (RTL/LTR marks, zero-width spaces, etc.)
- * These are commonly embedded in Hebrew CSV exports and break exact string matching.
- */
-function stripInvisible(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u00A0]/g, '').trim();
-}
-
-/**
- * Normalize a header: strip invisible chars, try Hebrew mapping, then English patterns
- */
 function normalizeHeader(raw: string): string {
   const trimmed = stripInvisible(raw);
-  // Try exact Hebrew match
   if (HEBREW_HEADER_MAP[trimmed]) return HEBREW_HEADER_MAP[trimmed];
-  // Try contains-based Hebrew match (in case of extra characters)
+  // Contains-based match for Hebrew headers with extra chars
   for (const [hebrewKey, mapped] of Object.entries(HEBREW_HEADER_MAP)) {
     if (trimmed.includes(hebrewKey) || hebrewKey.includes(trimmed)) {
       return mapped;
     }
   }
-  // Try lowercase English match
   const lower = trimmed.toLowerCase();
   if (lower === 'payer name' || lower === 'name' || lower === 'donor') return 'name';
   if (lower === 'amount' || lower === 'payment amount' || lower === 'sum') return 'amount';
   if (lower === 'currency' || lower === 'curr') return 'currency';
   if (lower === 'date' || lower === 'payment date') return 'date';
-  if (lower === 'reference' || lower === 'ref' || lower === 'id') return 'reference';
+  if (lower === 'reference' || lower === 'ref') return 'reference';
+  if (lower === 'email' || lower === 'e-mail') return 'email';
+  if (lower === 'phone' || lower === 'tel' || lower === 'telephone') return 'phone';
   if (lower === 'description' || lower === 'note' || lower === 'purpose' || lower === 'category') return 'category';
   return lower;
 }
@@ -153,14 +179,18 @@ export interface ParseResult {
   headersMapped: string[];
   headersRaw: string[];
   totalLines: number;
+  preview: string;
 }
 
 export function parseNedarimCSV(csvText: string): ParseResult {
-  // Strip BOM (common in Hebrew CSV exports from Windows/Israeli systems)
+  // Strip BOM
   const cleaned = csvText.replace(/^\uFEFF/, '');
-  // Normalize line endings and split
+  // Normalize line endings
   const lines = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n');
-  if (lines.length < 2) return { rows: [], headersMapped: [], headersRaw: [], totalLines: lines.length };
+  // Build a preview of the first 3 lines (raw)
+  const preview = lines.slice(0, 3).join('\n');
+
+  if (lines.length < 2) return { rows: [], headersMapped: [], headersRaw: [], totalLines: lines.length, preview };
 
   const delimiter = detectDelimiter(lines[0]);
   const rawHeaders = lines[0].split(delimiter).map((h) => h.trim());
@@ -183,8 +213,11 @@ export function parseNedarimCSV(csvText: string): ParseResult {
       date: row['date'] || '',
       reference: row['reference'] || row['transaction_number'] || '',
       description: row['category'] || row['notes'] || '',
+      // Pass through email/phone for matching
+      email: stripInvisible(row['email'] || ''),
+      phone: stripInvisible(row['phone'] || ''),
     };
   }).filter((r) => r.payer_name && r.amount > 0);
 
-  return { rows, headersMapped: headers, headersRaw: rawHeaders, totalLines: lines.length };
+  return { rows, headersMapped: headers, headersRaw: rawHeaders, totalLines: lines.length, preview };
 }
