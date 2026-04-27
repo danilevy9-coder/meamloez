@@ -381,6 +381,7 @@ export async function getDashboardStats(): Promise<{
   totalOutstandingUsd: number;
   totalDonationsIls: number;
   totalMembershipFeesIls: number;
+  totalExpectedMonthlyFees: number;
   recentPayments: LedgerEntryWithMember[];
   memberCount: number;
   donorCount: number;
@@ -389,7 +390,7 @@ export async function getDashboardStats(): Promise<{
   liveRateSource: string;
   liveRateUpdatedAt: string | null;
 }> {
-  const [balancesRes, paymentsRes, membersRes, donorsRes, donationTotalRes, feeTotalRes, shulRate, liveRateData] = await Promise.all([
+  const [balancesRes, paymentsRes, membersRes, donorsRes, donationTotalRes, feeTotalRes, monthlyFeesRes, shulRate, liveRateData] = await Promise.all([
     supabase.from('member_balances').select('balance_ils'),
     supabase
       .from('ledger')
@@ -401,6 +402,7 @@ export async function getDashboardStats(): Promise<{
     supabase.from('donors').select('id', { count: 'exact', head: true }),
     supabase.from('ledger').select('amount_ils').eq('type', 'payment').eq('income_category', 'donation'),
     supabase.from('ledger').select('amount_ils').eq('type', 'payment').eq('income_category', 'membership_fee'),
+    supabase.from('members').select('membership_fee').not('membership_fee', 'is', null),
     getShulRate(),
     getLiveExchangeRate(),
   ]);
@@ -420,11 +422,17 @@ export async function getDashboardStats(): Promise<{
     0
   );
 
+  const totalExpectedMonthlyFees = (monthlyFeesRes.data ?? []).reduce(
+    (sum, m) => sum + ((m as { membership_fee: number }).membership_fee ?? 0),
+    0
+  );
+
   return {
     totalOutstandingIls,
     totalOutstandingUsd: liveRateData.rate > 0 ? Math.round((totalOutstandingIls / liveRateData.rate) * 100) / 100 : 0,
     totalDonationsIls,
     totalMembershipFeesIls,
+    totalExpectedMonthlyFees,
     recentPayments: (paymentsRes.data ?? []) as LedgerEntryWithMember[],
     memberCount: membersRes.count ?? 0,
     donorCount: donorsRes.count ?? 0,

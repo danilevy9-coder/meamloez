@@ -128,7 +128,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats Cards Row 2 */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Members</CardTitle>
@@ -161,6 +161,21 @@ export default async function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{upcomingYahrzeits.length}</div>
             <p className="text-xs text-muted-foreground">Next 7 days</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">
+              Expected Monthly Fees
+            </CardTitle>
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {'\u20AA'}{stats.totalExpectedMonthlyFees.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">Sum of all member fees/mo</p>
           </CardContent>
         </Card>
       </div>
